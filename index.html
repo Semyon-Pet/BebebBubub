@@ -11,7 +11,13 @@
             box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
             -webkit-touch-callout: none;
+            /* Полностью убирает синюю вспышку при касании на телефонах */
+            -webkit-tap-highlight-color: transparent;
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+            outline: none;
             margin: 0;
             padding: 0;
         }
@@ -19,6 +25,8 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
+            touch-action: none;
+            overscroll-behavior: none;
             background-color: #0d0d14;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -34,15 +42,20 @@
             background: #1e1e2f;
             box-shadow: 0 0 35px rgba(0,0,0,0.9);
             overflow: hidden;
+            touch-action: none;
         }
         canvas {
             display: block;
             width: 100%;
             height: 100%;
-            cursor: pointer;
+            cursor: grab;
+            touch-action: none;
+        }
+        canvas:active {
+            cursor: grabbing;
         }
 
-        /* Кастомная иконка монетки (вместо эмодзи, который отображался квадратом) */
+        /* Векторная иконка монетки */
         .coin-icon {
             display: inline-flex;
             align-items: center;
@@ -225,7 +238,7 @@
         }
         .btn-row .btn { width: 50%; }
 
-        /* Магазин */
+        /* Магазин (разрешаем вертикальный скролл списка) */
         .tabs {
             display: flex;
             gap: 8px;
@@ -250,6 +263,7 @@
             width: 95%;
             height: 290px;
             overflow-y: auto;
+            touch-action: pan-y;
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
@@ -289,6 +303,7 @@
             height: 100%;
             object-fit: cover;
             display: block;
+            pointer-events: none;
         }
         .item-title {
             font-size: 14px;
@@ -314,6 +329,7 @@
             width: 92%;
             height: 280px;
             overflow-y: auto;
+            touch-action: pan-y;
             background: rgba(255,255,255,0.05);
             border-radius: 14px;
             padding: 10px;
@@ -352,7 +368,7 @@
     <div class="overlay" id="start-menu">
         <h1>ВЕРИТИ ДЖАМП</h1>
         <div class="coin-balance"><span class="coin-icon"></span> Монеты: <span class="coins-total">0</span></div>
-        <p><b>Управление:</b> Води мышкой (или пальцем), кликай слева/справа или нажимай ⬅️➡️ / A D</p>
+        <p><b>Управление:</b> Свайпай пальцем (или мышкой) влево-вправо в любом месте экрана, либо жми ⬅️➡️ / A D</p>
         
         <button class="btn" id="btn-start">🚀 ИГРАТЬ</button>
         <div class="btn-row">
@@ -414,9 +430,8 @@
 <script>
 /**
  * ============================================================================
- * 1. НАСТРОЙКА СКИНОВ (ЗДЕСЬ УКАЗАНЫ ИМЕНА ФАЙЛОВ ТВОИХ КАРТИНОК В ПАПКЕ)
- * Просто положи файлы skin1.png, skin2.png, skin3.png, skin4.png, skin5.png
- * в одну папку с этим файлом index.html!
+ * 1. НАСТРОЙКА СКИНОВ (ФАЙЛЫ КАРТИНОК В ПАПКЕ)
+ * Положи skin1.png, skin2.png, skin3.png, skin4.png, skin5.png рядом с index.html
  * ============================================================================
  */
 const BALL_SKINS = [
@@ -427,7 +442,6 @@ const BALL_SKINS = [
     { id: 'skin5', name: 'Космо Верити',    price: 600, img: 'skin5.png', color1: '#a55eea', color2: '#4b7bec' }
 ];
 
-// Каталог скинов заднего фона
 const BG_SKINS = [
     { id: 'night',  name: 'Ночной город',    price: 0,   top: '#1e1e2f', bot: '#2d2d44', grid: 'rgba(255,255,255,0.03)' },
     { id: 'paper',  name: 'Тетрадь',         price: 120, top: '#f5f6fa', bot: '#dcdde1', grid: 'rgba(15, 188, 249, 0.25)' },
@@ -436,13 +450,11 @@ const BG_SKINS = [
     { id: 'space',  name: 'Глубокий Космос', price: 550, top: '#05050a', bot: '#130f40', grid: 'rgba(255, 255, 255, 0.05)' }
 ];
 
-// Автоматическая загрузка картинок для каждого скина из папки
 const loadedSkinImages = {};
 BALL_SKINS.forEach(skin => {
     const imgObj = new Image();
     imgObj.onload = () => {
         loadedSkinImages[skin.id] = imgObj;
-        // Если магазин открыт в момент загрузки картинки — обновим превью
         if (!document.getElementById('shop-menu').classList.contains('hidden')) {
             renderShopItems();
         }
@@ -450,7 +462,6 @@ BALL_SKINS.forEach(skin => {
     imgObj.src = skin.img;
 });
 
-// Сохранения игрока
 const SaveData = {
     coins: Number(localStorage.getItem('vj_coins')) || 0,
     bestScore: Number(localStorage.getItem('vj_best')) || 0,
@@ -637,7 +648,7 @@ function renderFallbackLeaders(container) {
 }
 
 /**
- * 4. ИГРОВОЙ ДВИЖОК И ЛОГИКА
+ * 4. ИГРОВОЙ ДВИЖОК И УПРАВЛЕНИЕ СВАЙПАМИ
  */
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -653,41 +664,6 @@ let canRevive = true;
 let shopFrom = 'MENU';
 let currentShopTab = 'balls';
 
-// Управление
-const keys = { left: false, right: false };
-let pointerActive = false;
-let pointerTargetX = GW / 2;
-
-window.addEventListener('keydown', e => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys.left = true; pointerActive = false; }
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys.right = true; pointerActive = false; }
-    if (e.code === 'Escape' && (state === 'PLAY' || state === 'PAUSE')) {
-        state === 'PLAY' ? pauseGame() : resumeGame();
-    }
-});
-window.addEventListener('keyup', e => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
-});
-
-function updatePointerPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    pointerTargetX = ((clientX - rect.left) / rect.width) * GW;
-}
-
-canvas.addEventListener('pointerdown', e => {
-    pointerActive = true;
-    updatePointerPos(e);
-});
-canvas.addEventListener('pointermove', e => {
-    if (pointerActive || e.buttons === 1) {
-        pointerActive = true;
-        updatePointerPos(e);
-    }
-});
-window.addEventListener('pointerup', () => { pointerActive = false; });
-
 const player = {
     x: GW / 2,
     y: GH - 150,
@@ -700,6 +676,64 @@ const player = {
     scaleY: 1,
     shieldTimer: 0
 };
+
+// Запрет системного выделения и контекстного меню на телефонах
+window.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('selectstart', e => e.preventDefault());
+
+// Управление клавиатурой
+const keys = { left: false, right: false };
+window.addEventListener('keydown', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys.left = true; isSwiping = false; }
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys.right = true; isSwiping = false; }
+    if (e.code === 'Escape' && (state === 'PLAY' || state === 'PAUSE')) {
+        state === 'PLAY' ? pauseGame() : resumeGame();
+    }
+});
+window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+});
+
+// Управление СВАЙПАМИ (относительное перемещение пальца/мыши из любой точки экрана)
+let isSwiping = false;
+let lastPointerX = 0;
+
+function getCanvasX(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+    return ((clientX - rect.left) / rect.width) * GW;
+}
+
+canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    isSwiping = true;
+    lastPointerX = getCanvasX(e);
+    if (canvas.setPointerCapture) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+}, { passive: false });
+
+canvas.addEventListener('pointermove', e => {
+    if (!isSwiping) return;
+    e.preventDefault();
+    const currentX = getCanvasX(e);
+    const deltaX = currentX - lastPointerX;
+    lastPointerX = currentX;
+
+    if (state === 'PLAY') {
+        // Чувствительность свайпа 1.25 (достаточно короткого движения пальцем)
+        player.x += deltaX * 1.25;
+        // Плавная передача скорости для наклона глаз и инерции после отпускания
+        player.vx = Math.max(-9, Math.min(9, deltaX * 0.85));
+    }
+}, { passive: false });
+
+function stopSwipe() {
+    isSwiping = false;
+}
+window.addEventListener('pointerup', stopSwipe);
+window.addEventListener('pointercancel', stopSwipe);
 
 let platforms = [];
 let coins = [];
@@ -747,7 +781,7 @@ function createPlatform(y, forceSafe = false) {
 function initGame() {
     score = 0;
     canRevive = true;
-    pointerActive = false;
+    isSwiping = false;
     document.getElementById('score-ui').innerText = '0';
     updateCoinsUI();
 
@@ -787,19 +821,22 @@ function spawnParticles(x, y, color) {
 function update() {
     if (state !== 'PLAY') return;
 
+    // Если нажаты кнопки клавиатуры — двигаем кнопками, иначе плавно гасим инерцию свайпа
     if (keys.left) {
         player.vx = -6.2;
+        player.x += player.vx;
     } else if (keys.right) {
         player.vx = 6.2;
-    } else if (pointerActive) {
-        const diffX = pointerTargetX - player.x;
-        player.vx = Math.max(-7.5, Math.min(7.5, diffX * 0.22));
+        player.x += player.vx;
+    } else if (!isSwiping) {
+        player.x += player.vx;
+        player.vx *= 0.84;
     } else {
-        player.vx *= 0.82;
+        // Во время удержания пальца на одном месте гасим скорость наклона взгляда
+        player.vx *= 0.7;
     }
 
-    player.x += player.vx;
-
+    // Телепортация через левый и правый край экрана
     if (player.x + player.r < 0) player.x = GW + player.r;
     if (player.x - player.r > GW) player.x = -player.r;
 
@@ -841,7 +878,7 @@ function update() {
             }
         }
 
-        // Спавн летающих врагов ТОЛЬКО начиная с 3000 очков
+        // Спавн летающих врагов начиная с 3000 очков
         monsters = monsters.filter(m => m.y < GH + 60);
         if (score >= 3000 && monsters.length === 0 && Math.random() < 0.015) {
             monsters.push({ x: Math.random() * (GW - 50) + 25, y: -40, r: 20, vx: 2.2 });
@@ -1074,7 +1111,7 @@ function draw() {
         ctx.globalAlpha = 1;
     }
 
-    // Отрисовка Шарика с загруженной картинкой скина
+    // Отрисовка Шарика со скином
     const ballSkin = BALL_SKINS.find(b => b.id === SaveData.selectedBall) || BALL_SKINS[0];
     const customImg = loadedSkinImages[ballSkin.id];
 
@@ -1096,10 +1133,8 @@ function draw() {
     ctx.clip();
 
     if (customImg) {
-        // Рисуем твою картинку из папки!
         ctx.drawImage(customImg, -player.r, -player.r, player.r * 2, player.r * 2);
     } else {
-        // Запасной вариант, если картинка еще не положена в папку
         const grad = ctx.createRadialGradient(-6, -6, 4, 0, 0, player.r);
         grad.addColorStop(0, ballSkin.color1);
         grad.addColorStop(1, ballSkin.color2);
@@ -1137,7 +1172,7 @@ function draw() {
 }
 
 /**
- * 6. МЕНЮ И МАГАЗИН С ОТОБРАЖЕНИЕМ КАРТИНОК ИЗ ПАПКИ
+ * 6. МЕНЮ И МАГАЗИН
  */
 function hideAllOverlays() {
     document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
@@ -1154,6 +1189,7 @@ function startGame() {
 function pauseGame() {
     if (state !== 'PLAY') return;
     state = 'PAUSE';
+    isSwiping = false;
     document.getElementById('pause-menu').classList.remove('hidden');
 }
 
@@ -1165,6 +1201,7 @@ function resumeGame() {
 
 function goToMainMenu() {
     state = 'MENU';
+    isSwiping = false;
     hideAllOverlays();
     document.getElementById('game-hud').classList.add('hidden');
     document.getElementById('start-menu').classList.remove('hidden');
@@ -1173,7 +1210,7 @@ function goToMainMenu() {
 function triggerGameOver() {
     Sound.play('dead');
     state = 'OVER';
-    pointerActive = false;
+    isSwiping = false;
 
     if (score > SaveData.bestScore) {
         SaveData.bestScore = score;
@@ -1248,8 +1285,6 @@ function renderShopItems() {
             ? `background: linear-gradient(135deg, ${item.color1}, ${item.color2});`
             : `background: linear-gradient(180deg, ${item.top}, ${item.bot}); border-radius: 12px;`;
 
-        // Если это шарик — ставим тег <img> с твоим файлом из папки.
-        // Если файл еще не добавлен в папку — аккуратно показываем запасную иконку.
         const previewInner = isBalls
             ? `<img src="${item.img}" alt="${item.name}" onerror="this.style.display='none'; this.parentNode.innerHTML='😏';">`
             : '🖼️';
