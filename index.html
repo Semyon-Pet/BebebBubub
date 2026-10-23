@@ -2,29 +2,32 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Верити Джамп</title>
     <!-- Официальный SDK Яндекс Игр -->
     <script src="https://yandex.ru/games/sdk/v2"></script>
     <style>
-        * {
+        /* Полный запрет синего выделения на всех мобильных браузерах */
+        *, *::before, *::after {
             box-sizing: border-box;
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            -webkit-touch-callout: none;
-            /* Полностью убирает синюю вспышку при касании на телефонах */
-            -webkit-tap-highlight-color: transparent;
-            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-            outline: none;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            -webkit-touch-callout: none !important;
+            -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+            -webkit-tap-highlight-color: transparent !important;
+            outline: none !important;
             margin: 0;
             padding: 0;
         }
-        body, html {
+        html, body {
             width: 100%;
             height: 100%;
             overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
             touch-action: none;
             overscroll-behavior: none;
             background-color: #0d0d14;
@@ -48,11 +51,8 @@
             display: block;
             width: 100%;
             height: 100%;
-            cursor: grab;
+            cursor: default;
             touch-action: none;
-        }
-        canvas:active {
-            cursor: grabbing;
         }
 
         /* Векторная иконка монетки */
@@ -116,11 +116,9 @@
             border-radius: 12px;
             font-size: 18px;
             font-weight: bold;
-            cursor: pointer;
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: transform 0.1s;
         }
         .pause-btn:active { transform: scale(0.92); }
 
@@ -142,7 +140,7 @@
         .hidden { display: none !important; }
         h1 {
             font-size: 32px;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
             color: #ffdd59;
             text-shadow: 0 4px 12px rgba(255, 221, 89, 0.3);
         }
@@ -200,11 +198,10 @@
             font-size: 17px;
             font-weight: bold;
             border-radius: 12px;
-            cursor: pointer;
             margin: 5px 0;
             width: 90%;
             box-shadow: 0 4px 12px rgba(255, 63, 52, 0.35);
-            transition: transform 0.1s, opacity 0.2s;
+            transition: transform 0.1s;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -238,7 +235,7 @@
         }
         .btn-row .btn { width: 50%; }
 
-        /* Магазин (разрешаем вертикальный скролл списка) */
+        /* Магазин */
         .tabs {
             display: flex;
             gap: 8px;
@@ -253,7 +250,6 @@
             border: none;
             border-radius: 10px;
             font-weight: bold;
-            cursor: pointer;
         }
         .tab-btn.active {
             background: #ffdd59;
@@ -317,7 +313,6 @@
             border: none;
             font-weight: bold;
             font-size: 13px;
-            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -368,7 +363,7 @@
     <div class="overlay" id="start-menu">
         <h1>ВЕРИТИ ДЖАМП</h1>
         <div class="coin-balance"><span class="coin-icon"></span> Монеты: <span class="coins-total">0</span></div>
-        <p><b>Управление:</b> Свайпай пальцем (или мышкой) влево-вправо в любом месте экрана, либо жми ⬅️➡️ / A D</p>
+        <p><b>Управление:</b> Зажми палец (или мышку) в любом месте и веди влево-вправо!</p>
         
         <button class="btn" id="btn-start">🚀 ИГРАТЬ</button>
         <div class="btn-row">
@@ -429,10 +424,7 @@
 
 <script>
 /**
- * ============================================================================
  * 1. НАСТРОЙКА СКИНОВ (ФАЙЛЫ КАРТИНОК В ПАПКЕ)
- * Положи skin1.png, skin2.png, skin3.png, skin4.png, skin5.png рядом с index.html
- * ============================================================================
  */
 const BALL_SKINS = [
     { id: 'skin1', name: 'Верити Оригинал', price: 0,   img: 'skin1.png', color1: '#ffeaa7', color2: '#fdcb6e' },
@@ -488,7 +480,7 @@ function updateCoinsUI() {
 updateCoinsUI();
 
 /**
- * 2. ЗВУКОВОЙ ДВИЖОК (Web Audio API)
+ * 2. ЗВУКОВОЙ ДВИЖОК
  */
 const Sound = {
     ctx: null,
@@ -648,7 +640,7 @@ function renderFallbackLeaders(container) {
 }
 
 /**
- * 4. ИГРОВОЙ ДВИЖОК И УПРАВЛЕНИЕ СВАЙПАМИ
+ * 4. ИГРОВОЙ ДВИЖОК И СИНХРОНИЗАЦИЯ ЧАСТОТЫ КАДРОВ (60 FPS)
  */
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -677,15 +669,15 @@ const player = {
     shieldTimer: 0
 };
 
-// Запрет системного выделения и контекстного меню на телефонах
+// Блокируем контекстное меню и выделение
 window.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('selectstart', e => e.preventDefault());
 
-// Управление клавиатурой
+// Клавиатура
 const keys = { left: false, right: false };
 window.addEventListener('keydown', e => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys.left = true; isSwiping = false; }
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys.right = true; isSwiping = false; }
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys.left = true; swipe.active = false; }
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys.right = true; swipe.active = false; }
     if (e.code === 'Escape' && (state === 'PLAY' || state === 'PAUSE')) {
         state === 'PLAY' ? pauseGame() : resumeGame();
     }
@@ -695,45 +687,73 @@ window.addEventListener('keyup', e => {
     if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
 });
 
-// Управление СВАЙПАМИ (относительное перемещение пальца/мыши из любой точки экрана)
-let isSwiping = false;
-let lastPointerX = 0;
+// УПРАВЛЕНИЕ СВАЙПОМ (накопление сдвига между кадрами без ускорения игры)
+const swipe = {
+    active: false,
+    currX: 0,
+    currY: 0,
+    pendingDeltaX: 0
+};
 
-function getCanvasX(e) {
+function toCanvasCoords(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
-    return ((clientX - rect.left) / rect.width) * GW;
+    return {
+        x: ((clientX - rect.left) / rect.width) * GW,
+        y: ((clientY - rect.top) / rect.height) * GH
+    };
 }
 
-canvas.addEventListener('pointerdown', e => {
+function handleStart(clientX, clientY) {
+    const pos = toCanvasCoords(clientX, clientY);
+    swipe.active = true;
+    swipe.currX = pos.x;
+    swipe.currY = pos.y;
+    swipe.pendingDeltaX = 0;
+}
+
+function handleMove(clientX, clientY) {
+    if (!swipe.active) return;
+    const pos = toCanvasCoords(clientX, clientY);
+    swipe.pendingDeltaX += (pos.x - swipe.currX);
+    swipe.currX = pos.x;
+    swipe.currY = pos.y;
+}
+
+function handleEnd() {
+    swipe.active = false;
+    swipe.pendingDeltaX = 0;
+}
+
+// События для телефона (Touch)
+canvas.addEventListener('touchstart', e => {
     e.preventDefault();
-    isSwiping = true;
-    lastPointerX = getCanvasX(e);
-    if (canvas.setPointerCapture) {
-        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    if (e.touches.length > 0) {
+        handleStart(e.touches[0].clientX, e.touches[0].clientY);
     }
 }, { passive: false });
 
-canvas.addEventListener('pointermove', e => {
-    if (!isSwiping) return;
+canvas.addEventListener('touchmove', e => {
     e.preventDefault();
-    const currentX = getCanvasX(e);
-    const deltaX = currentX - lastPointerX;
-    lastPointerX = currentX;
-
-    if (state === 'PLAY') {
-        // Чувствительность свайпа 1.25 (достаточно короткого движения пальцем)
-        player.x += deltaX * 1.25;
-        // Плавная передача скорости для наклона глаз и инерции после отпускания
-        player.vx = Math.max(-9, Math.min(9, deltaX * 0.85));
+    if (e.touches.length > 0) {
+        handleMove(e.touches[0].clientX, e.touches[0].clientY);
     }
 }, { passive: false });
 
-function stopSwipe() {
-    isSwiping = false;
-}
-window.addEventListener('pointerup', stopSwipe);
-window.addEventListener('pointercancel', stopSwipe);
+window.addEventListener('touchend', handleEnd);
+window.addEventListener('touchcancel', handleEnd);
+
+// События для компьютера (Мышь)
+canvas.addEventListener('mousedown', e => {
+    e.preventDefault();
+    handleStart(e.clientX, e.clientY);
+});
+
+window.addEventListener('mousemove', e => {
+    if (!swipe.active) return;
+    handleMove(e.clientX, e.clientY);
+});
+
+window.addEventListener('mouseup', handleEnd);
 
 let platforms = [];
 let coins = [];
@@ -781,7 +801,8 @@ function createPlatform(y, forceSafe = false) {
 function initGame() {
     score = 0;
     canRevive = true;
-    isSwiping = false;
+    swipe.active = false;
+    swipe.pendingDeltaX = 0;
     document.getElementById('score-ui').innerText = '0';
     updateCoinsUI();
 
@@ -818,25 +839,27 @@ function spawnParticles(x, y, color) {
     }
 }
 
-function update() {
+// Функция физического шага (строго 60 раз в секунду независимо от герцовки экрана)
+function updateStep() {
     if (state !== 'PLAY') return;
 
-    // Если нажаты кнопки клавиатуры — двигаем кнопками, иначе плавно гасим инерцию свайпа
     if (keys.left) {
         player.vx = -6.2;
         player.x += player.vx;
     } else if (keys.right) {
         player.vx = 6.2;
         player.x += player.vx;
-    } else if (!isSwiping) {
-        player.x += player.vx;
-        player.vx *= 0.84;
+    } else if (swipe.active) {
+        // Применяем накопленный сдвиг пальца за этот кадр
+        const moveX = swipe.pendingDeltaX * 1.25;
+        player.x += moveX;
+        player.vx = Math.max(-8, Math.min(8, moveX * 0.75));
+        swipe.pendingDeltaX = 0;
     } else {
-        // Во время удержания пальца на одном месте гасим скорость наклона взгляда
-        player.vx *= 0.7;
+        player.x += player.vx;
+        player.vx *= 0.82;
     }
 
-    // Телепортация через левый и правый край экрана
     if (player.x + player.r < 0) player.x = GW + player.r;
     if (player.x - player.r > GW) player.x = -player.r;
 
@@ -848,7 +871,6 @@ function update() {
 
     if (player.shieldTimer > 0) player.shieldTimer--;
 
-    // Движение камеры вверх
     if (player.y < GH * 0.44) {
         const diff = GH * 0.44 - player.y;
         player.y = GH * 0.44;
@@ -878,14 +900,13 @@ function update() {
             }
         }
 
-        // Спавн летающих врагов начиная с 3000 очков
+        // Спавн летающих врагов с 3000 очков
         monsters = monsters.filter(m => m.y < GH + 60);
         if (score >= 3000 && monsters.length === 0 && Math.random() < 0.015) {
             monsters.push({ x: Math.random() * (GW - 50) + 25, y: -40, r: 20, vx: 2.2 });
         }
     }
 
-    // Сбор монет
     for (let c of coins) {
         if (c.collected) continue;
         c.angle += 0.08;
@@ -899,7 +920,6 @@ function update() {
         }
     }
 
-    // Приземление на платформы
     if (player.vy > 0) {
         for (let p of platforms) {
             if (p.broken) continue;
@@ -995,7 +1015,6 @@ function draw() {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GW, y); ctx.stroke();
     }
 
-    // Отрисовка платформ
     for (let p of platforms) {
         if (p.broken) continue;
 
@@ -1059,7 +1078,6 @@ function draw() {
         }
     }
 
-    // Отрисовка монеток
     for (let c of coins) {
         if (c.collected) continue;
         ctx.save();
@@ -1082,7 +1100,6 @@ function draw() {
         ctx.restore();
     }
 
-    // Отрисовка монстров
     for (let m of monsters) {
         ctx.fillStyle = '#ff3f34';
         ctx.beginPath();
@@ -1101,7 +1118,6 @@ function draw() {
         ctx.fill();
     }
 
-    // Частицы
     for (let pt of particles) {
         ctx.fillStyle = pt.color;
         ctx.globalAlpha = pt.life;
@@ -1111,7 +1127,7 @@ function draw() {
         ctx.globalAlpha = 1;
     }
 
-    // Отрисовка Шарика со скином
+    // Отрисовка Шарика
     const ballSkin = BALL_SKINS.find(b => b.id === SaveData.selectedBall) || BALL_SKINS[0];
     const customImg = loadedSkinImages[ballSkin.id];
 
@@ -1167,8 +1183,18 @@ function draw() {
         ctx.arc(2 + lookDir, 5, 7, 0.1 * Math.PI, 0.85 * Math.PI);
         ctx.stroke();
     }
-
     ctx.restore();
+
+    // Визуальный индикатор свайпа под пальцем
+    if (swipe.active && state === 'PLAY') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.strokeStyle = 'rgba(255, 221, 89, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(swipe.currX, swipe.currY, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
 }
 
 /**
@@ -1189,7 +1215,7 @@ function startGame() {
 function pauseGame() {
     if (state !== 'PLAY') return;
     state = 'PAUSE';
-    isSwiping = false;
+    swipe.active = false;
     document.getElementById('pause-menu').classList.remove('hidden');
 }
 
@@ -1201,7 +1227,7 @@ function resumeGame() {
 
 function goToMainMenu() {
     state = 'MENU';
-    isSwiping = false;
+    swipe.active = false;
     hideAllOverlays();
     document.getElementById('game-hud').classList.add('hidden');
     document.getElementById('start-menu').classList.remove('hidden');
@@ -1210,7 +1236,7 @@ function goToMainMenu() {
 function triggerGameOver() {
     Sound.play('dead');
     state = 'OVER';
-    isSwiping = false;
+    swipe.active = false;
 
     if (score > SaveData.bestScore) {
         SaveData.bestScore = score;
@@ -1390,13 +1416,27 @@ document.getElementById('btn-close-leaders').addEventListener('click', () => {
     document.getElementById('start-menu').classList.remove('hidden');
 });
 
+// Стабилизированный игровой цикл (ровно 60 физический шагов в секунду на любом экране)
 initGame();
-function loop() {
-    update();
+let lastTime = performance.now();
+let accumulator = 0;
+const STEP = 1000 / 60; // 16.66 мс
+
+function loop(now) {
+    let frameTime = now - lastTime;
+    lastTime = now;
+    if (frameTime > 100) frameTime = 100; // Защита от скачков при сворачивании вкладки
+
+    accumulator += frameTime;
+    while (accumulator >= STEP) {
+        updateStep();
+        accumulator -= STEP;
+    }
+
     draw();
     requestAnimationFrame(loop);
 }
-loop();
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
